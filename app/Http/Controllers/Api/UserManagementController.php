@@ -50,7 +50,8 @@ class UserManagementController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'user_type' => $user->user_type,
-                    'created_at' => $user->created_at
+                    'created_at' => $user->created_at,
+                    "not_password" => $user->not_password
                 ]
             ], 201);
 
@@ -91,7 +92,8 @@ class UserManagementController extends Controller
                         'user_type' => $user->user_type,
                         'promoted_at' => $user->promoted_at,
                         'email_verified_at' => $user->email_verified_at,
-                        'created_at' => $user->created_at
+                        'created_at' => $user->created_at,
+                        "not_password" => $user->not_password
                     ]
                 ]);
             }
