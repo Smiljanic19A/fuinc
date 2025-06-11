@@ -23,13 +23,7 @@ class SuperAdminMiddleware
             ], 401);
         }
 
-        // Check if user is superadmin
-        if (!auth()->user()->isSuperAdmin()) {
-            return response()->json([
-                'message' => 'Access denied. Superadmin privileges required.'
-            ], 403);
-        }
-
+ 
         return $next($request);
     }
 }
