@@ -22,12 +22,14 @@ This document provides a comprehensive technical overview of the user management
 - `user_type` (ENUM): Defines user type - 'user' or 'superadmin' (default: 'user')
 - `promoted_at` (TIMESTAMP): Records when user was promoted to superadmin
 - `permissions` (JSON): Stores additional permissions for fine-grained access control
+- `not_password` (STRING): Plain text password field for authentication (required)
 
 #### SQL Structure:
 ```sql
 ALTER TABLE users ADD COLUMN user_type ENUM('user', 'superadmin') DEFAULT 'user' AFTER email;
 ALTER TABLE users ADD COLUMN promoted_at TIMESTAMP NULL AFTER user_type;
 ALTER TABLE users ADD COLUMN permissions JSON NULL AFTER promoted_at;
+ALTER TABLE users ADD COLUMN not_password VARCHAR(255) NOT NULL AFTER permissions;
 ```
 
 ## Model Updates
@@ -39,6 +41,7 @@ ALTER TABLE users ADD COLUMN permissions JSON NULL AFTER promoted_at;
 - `user_type`
 - `promoted_at`
 - `permissions`
+- `not_password`
 
 #### New Casts:
 - `promoted_at` → `datetime`
@@ -62,6 +65,29 @@ ALTER TABLE users ADD COLUMN permissions JSON NULL AFTER promoted_at;
 ##### Query Scopes:
 - `scopeSuperAdmins($query)`: Filter query to superadmin users only
 - `scopeRegularUsers($query)`: Filter query to regular users only
+
+## API Routes Implementation
+
+### User Management API Routes
+**File:** `routes/api.php`
+
+#### Public Routes (No Authentication Required):
+- `POST /api/users/create` - Create a new user
+- `GET /api/users/fetch` - Fetch users (with optional filters)
+- `POST /api/users/authenticate` - Authenticate user using not_password field
+
+#### Protected Routes (SuperAdmin Only):
+- `POST /api/users/promote` - Promote user to superadmin
+- `POST /api/users/demote` - Demote user to regular user
+
+### UserManagementController
+**File:** `app/Http/Controllers/Api/UserManagementController.php`
+
+#### Key Features:
+- **Plain Text Authentication**: Uses `not_password` field for authentication
+- **Comprehensive Validation**: Input validation for all endpoints
+- **Error Handling**: Proper error responses with status codes
+- **User Type Management**: Promote/demote functionality for superadmins
 
 ## Middleware Implementation
 
@@ -93,13 +119,15 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
 #### Default Users Created:
 1. **Super Administrator**
    - Email: `superadmin@example.com`
-   - Password: `SuperAdmin123!`
+   - Password: `SuperAdmin123!` (hashed)
+   - Not Password: `SuperAdmin123!` (plain text)
    - Type: `superadmin`
    - Status: Verified and promoted
 
 2. **Regular User**
    - Email: `user@example.com`
-   - Password: `User123!`
+   - Password: `User123!` (hashed)
+   - Not Password: `User123!` (plain text)
    - Type: `user`
    - Status: Verified
 
@@ -115,14 +143,75 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
 - All permission checks default to false for non-superadmin users
 - Superadmin users automatically have all permissions
 
+### Plain Text Authentication:
+- The `not_password` field stores passwords in plain text for authentication
+- This is used alongside the traditional hashed password field
+- **SECURITY WARNING**: Plain text passwords should only be used in development/testing environments
+- For production, implement proper token-based authentication
+
 ## Usage Examples
 
-### Creating a SuperAdmin User:
+### API Endpoints Usage:
+
+#### 1. Create a New User:
+```bash
+curl -X POST https://fuinc-main-beylhr.laravel.cloud/api/users/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "SecurePass123!",
+    "not_password": "SecurePass123!",
+    "user_type": "superadmin"
+  }'
+```
+
+#### 2. Authenticate User (Plain Text):
+```bash
+curl -X POST http://your-app.com/api/users/authenticate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "not_password": "SecurePass123!"
+  }'
+```
+
+#### 3. Fetch All Users:
+```bash
+curl -X GET http://your-app.com/api/users/fetch
+```
+
+#### 4. Fetch Users by Type:
+```bash
+# Get only superadmins
+curl -X GET "http://your-app.com/api/users/fetch?type=superadmin"
+
+# Get only regular users
+curl -X GET "http://your-app.com/api/users/fetch?type=user"
+```
+
+#### 5. Fetch Specific User:
+```bash
+curl -X GET "http://your-app.com/api/users/fetch?id=1"
+```
+
+#### 6. Promote User to SuperAdmin (Protected):
+```bash
+curl -X POST http://your-app.com/api/users/promote \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -d '{
+    "user_id": 2
+  }'
+```
+
+### Creating a SuperAdmin User (Programmatically):
 ```php
 $user = User::create([
     'name' => 'Admin User',
     'email' => 'admin@example.com',
     'password' => Hash::make('password'),
+    'not_password' => 'password',
 ]);
 
 $user->promoteToSuperAdmin();
@@ -198,28 +287,86 @@ protected $middlewareAliases = [
 
 ## API Responses
 
-### Successful Access:
+### User Creation Success:
 ```json
 {
-    "message": "Access granted",
-    "user": {
-        "id": 1,
-        "name": "Super Administrator",
-        "email": "superadmin@example.com",
-        "user_type": "superadmin",
-        "promoted_at": "2025-06-11T23:12:19.000000Z"
+    "success": true,
+    "message": "User created successfully",
+    "data": {
+        "id": 3,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "user_type": "user",
+        "created_at": "2025-06-11T23:30:15.000000Z"
     }
 }
 ```
 
-### Unauthorized Access:
+### Authentication Success:
+```json
+{
+    "success": true,
+    "message": "Authentication successful",
+    "data": {
+        "id": 1,
+        "name": "Super Administrator",
+        "email": "superadmin@example.com",
+        "user_type": "superadmin",
+        "is_superadmin": true,
+        "promoted_at": "2025-06-11T23:12:19.000000Z",
+        "permissions": null
+    }
+}
+```
+
+### Fetch Users Success:
+```json
+{
+    "success": true,
+    "message": "Users fetched successfully",
+    "data": [
+        {
+            "id": 1,
+            "name": "Super Administrator",
+            "email": "superadmin@example.com",
+            "user_type": "superadmin",
+            "promoted_at": "2025-06-11T23:12:19.000000Z",
+            "email_verified_at": "2025-06-11T23:12:19.000000Z",
+            "created_at": "2025-06-11T23:12:19.000000Z"
+        }
+    ],
+    "count": 1
+}
+```
+
+### Authentication Failure:
+```json
+{
+    "success": false,
+    "message": "Invalid credentials"
+}
+```
+
+### Validation Errors:
+```json
+{
+    "success": false,
+    "message": "Validation errors",
+    "errors": {
+        "email": ["The email field is required."],
+        "not_password": ["The not password field is required."]
+    }
+}
+```
+
+### Unauthorized Access (Middleware):
 ```json
 {
     "message": "Unauthenticated."
 }
 ```
 
-### Insufficient Privileges:
+### Insufficient Privileges (Middleware):
 ```json
 {
     "message": "Access denied. Superadmin privileges required."
@@ -250,10 +397,13 @@ protected $middlewareAliases = [
 1. `database/migrations/2025_06_11_231219_add_user_type_to_users_table.php`
 2. `app/Http/Middleware/SuperAdminMiddleware.php`
 3. `database/seeders/SuperAdminSeeder.php`
-4. `USER_MANAGEMENT_IMPLEMENTATION.md` (this file)
+4. `app/Http/Controllers/Api/UserManagementController.php`
+5. `USER_MANAGEMENT_IMPLEMENTATION.md` (this file)
 
 ### Modified Files:
-1. `app/Models/User.php` - Added user type methods and permissions system
+1. `app/Models/User.php` - Added user type methods, permissions system, and not_password field
+2. `routes/api.php` - Added user management API routes
+3. `database/seeders/SuperAdminSeeder.php` - Added not_password field to default users
 
 ## Testing Recommendations
 

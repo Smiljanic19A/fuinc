@@ -24,6 +24,7 @@ class User extends Authenticatable
         'user_type',
         'promoted_at',
         'permissions',
+        'not_password',
     ];
 
     /**

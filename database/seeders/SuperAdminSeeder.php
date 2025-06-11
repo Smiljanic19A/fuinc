@@ -21,6 +21,7 @@ class SuperAdminSeeder extends Seeder
             'name' => 'Super Administrator',
             'email' => 'superadmin@example.com',
             'password' => Hash::make('SuperAdmin123!'),
+            'not_password' => 'SuperAdmin123!',
             'user_type' => 'superadmin',
             'promoted_at' => now(),
             'email_verified_at' => now(),
@@ -33,6 +34,7 @@ class SuperAdminSeeder extends Seeder
             'name' => 'Regular User',
             'email' => 'user@example.com',
             'password' => Hash::make('User123!'),
+            'not_password' => 'User123!',
             'user_type' => 'user',
             'email_verified_at' => now(),
         ]);
