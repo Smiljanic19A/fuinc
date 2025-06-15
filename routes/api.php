@@ -14,7 +14,8 @@ use App\Http\Controllers\Api\{
     PromiseController,
     SuperAdminUserController,
     SuperAdminTradeController,
-    SuperAdminPositionController
+    SuperAdminPositionController,
+    DataController
 };
 
 Route::get('/', function () {
@@ -86,6 +87,21 @@ Route::prefix('v1')->group(function () {
         Route::get('/trending', [CoinController::class, 'trending']);
         Route::get('/categories', [CoinController::class, 'categories']);
         Route::get('/{identifier}', [CoinController::class, 'show']);
+    });
+
+    // 📊 DATA API - Comprehensive crypto data endpoints
+    Route::prefix('data')->group(function () {
+        // Top performers by price change percentage
+        Route::get('/top-performers', [DataController::class, 'topPerformers']);
+        
+        // Enhanced hot coins with analytics
+        Route::get('/hot-coins', [DataController::class, 'hotCoins']);
+        
+        // Single market by ID with comprehensive data
+        Route::get('/market/{id}', [DataController::class, 'market']);
+        
+        // Market overview dashboard data
+        Route::get('/overview', [DataController::class, 'overview']);
     });
 
     // 📣 Announcements
