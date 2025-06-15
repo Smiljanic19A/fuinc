@@ -321,7 +321,10 @@ class UserManagementController extends Controller
                 'success' => true,
                 'message' => 'Login successful',
                 'type' => $user->user_type,
-                'token' => $user->createToken()
+                'data' => [
+                    'token' => $user->createToken(),
+                    'user' => $user
+                ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
