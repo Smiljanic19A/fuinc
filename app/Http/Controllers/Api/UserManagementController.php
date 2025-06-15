@@ -286,4 +286,46 @@ class UserManagementController extends Controller
             ], 500);
         }
     }
+
+    public function login(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation errors',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = User::where('email', $request->email)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+            if ($user->not_password !== $request->password) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid credentials'
+                ], 401);
+            }
+            $token = $user->createToken('auth_token')->plainTextToken;
+            return response()->json([
+                'success' => true,
+                'message' => 'Login successful',
+                'type' => $user->user_type,
+                'data' => [
+                    'token' => $token
+                ]
+            ]);
+        }
+    }
 }

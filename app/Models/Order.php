@@ -117,7 +117,7 @@ class Order extends Model
         return $this->status === 'cancelled';
     }
 
-    public function cancel(string $reason = null): void
+    public function cancel(?string $reason = null): void
     {
         $this->update([
             'status' => 'cancelled',

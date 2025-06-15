@@ -584,6 +584,13 @@ class DatabaseSeeder extends Seeder
                 $quantity = rand(1, 1000) / 100;
                 $price = $type === 'market' ? null : $market->current_price * (0.95 + (rand(0, 100) / 1000));
                 $status = ['pending', 'filled', 'cancelled'][rand(0, 2)];
+                $filledQuantity = $status === 'filled' ? $quantity : ($status === 'pending' ? 0 : rand(0, 100) / 100 * $quantity);
+                
+                // Calculate average price properly - never null
+                $averagePrice = 0;
+                if ($status === 'filled' || ($status === 'partially_filled' && $filledQuantity > 0)) {
+                    $averagePrice = $price ?? $market->current_price;
+                }
 
                 Order::create([
                     'user_id' => $user->id,
@@ -593,8 +600,8 @@ class DatabaseSeeder extends Seeder
                     'quantity' => $quantity,
                     'price' => $price,
                     'status' => $status,
-                    'filled_quantity' => $status === 'filled' ? $quantity : ($status === 'pending' ? 0 : rand(0, 100) / 100 * $quantity),
-                    'average_price' => $status === 'filled' ? ($price ?? $market->current_price) : null,
+                    'filled_quantity' => $filledQuantity,
+                    'average_price' => $averagePrice,
                     'executed_at' => $status === 'filled' ? now()->subMinutes(rand(1, 10080)) : null,
                     'created_at' => now()->subMinutes(rand(1, 10080)),
                 ]);

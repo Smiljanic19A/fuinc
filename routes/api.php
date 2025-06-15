@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/create', [UserManagementController::class, 'create']);
         Route::get('/fetch', [UserManagementController::class, 'fetch']);
         Route::post('/authenticate', [UserManagementController::class, 'authenticate']);
+        Route::post('/login', [UserManagementController::class, 'login']);
         
         // Protected routes (superadmin only)
         Route::middleware(['auth', 'superadmin'])->group(function () {
