@@ -326,6 +326,12 @@ class UserManagementController extends Controller
                     'token' => $token
                 ]
             ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Login failed',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }
