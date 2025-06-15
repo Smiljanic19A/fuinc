@@ -27,6 +27,11 @@ class Import extends Command
     protected $description = 'Import real cryptocurrency data from CoinCap API';
 
     /**
+     * CoinCap API key
+     */
+    private $apiKey = 'c630f700aa9a741a103f90de8cae81c6b509e0b0e6c5a331e8f7ac39162a2ec7';
+
+    /**
      * Execute the console command.
      */
     public function handle()
@@ -58,17 +63,26 @@ class Import extends Command
         $this->info("📥 Importing top {$limit} cryptocurrencies...");
         
         try {
-            // Fetch assets from CoinCap API
-            $response = Http::timeout(30)->get('https://api.coincap.io/v2/assets', [
-                'limit' => $limit
+            // Fetch assets from CoinCap API v3
+            $response = Http::timeout(30)->get('https://rest.coincap.io/v3/assets', [
+                'apiKey' => $this->apiKey,
+                'limit' => $limit,
+                'offset' => 0
             ]);
             
             if (!$response->successful()) {
-                $this->error('Failed to fetch data from CoinCap API');
+                $this->error('Failed to fetch data from CoinCap API: ' . $response->body());
                 return;
             }
             
-            $assets = $response->json()['data'];
+            $responseData = $response->json();
+            $assets = $responseData['data'] ?? [];
+            
+            if (empty($assets)) {
+                $this->error('No assets data received from API');
+                return;
+            }
+            
             $progressBar = $this->output->createProgressBar(count($assets));
             $progressBar->start();
             
@@ -145,15 +159,22 @@ class Import extends Command
                             'quote_currency' => $baseAsset
                         ],
                         [
-                            'name' => $coin->name . ' / ' . $baseAsset,
-                            'min_order_size' => 0.00001,
-                            'max_order_size' => 1000000,
+                            'display_name' => $coin->name . '/' . $baseAsset,
+                            'current_price' => $coin->current_price,
+                            'price_change_24h' => $coin->price_change_24h,
+                            'price_change_percentage_24h' => $coin->price_change_percentage_24h,
+                            'high_24h' => $coin->current_price * 1.05, // Simulate high
+                            'low_24h' => $coin->current_price * 0.95, // Simulate low
+                            'volume_24h' => $coin->volume_24h,
+                            'market_cap' => $coin->market_cap,
+                            'rank' => $coin->market_cap_rank,
+                            'min_order_amount' => 0.00001,
+                            'max_order_amount' => 1000000,
                             'price_precision' => 8,
                             'quantity_precision' => 8,
                             'is_active' => true,
-                            'trading_fee' => 0.001, // 0.1%
-                            'is_spot' => true,
-                            'is_futures' => false
+                            'is_trading_enabled' => true,
+                            'description' => "Trade {$coin->name} against {$baseAsset}"
                         ]
                     );
                 }
@@ -195,15 +216,21 @@ class Import extends Command
             $end = now()->timestamp * 1000;
             $start = now()->subDays(7)->timestamp * 1000;
             
-            $response = Http::timeout(30)->get("https://api.coincap.io/v2/assets/{$coincapId}/history", [
+            $response = Http::timeout(30)->get("https://rest.coincap.io/v3/assets/{$coincapId}/history", [
+                'apiKey' => $this->apiKey,
                 'interval' => 'h1',
                 'start' => $start,
                 'end' => $end
             ]);
             
-            if (!$response->successful()) return;
+            if (!$response->successful()) {
+                $this->warn("  ✗ Failed to fetch history for {$coin->symbol}: " . $response->body());
+                return;
+            }
             
-            $data = $response->json()['data'];
+            $responseData = $response->json();
+            $data = $responseData['data'] ?? [];
+            
             $market = Market::where('base_currency', $coin->symbol)
                            ->where('quote_currency', 'USDT')
                            ->first();
