@@ -42,15 +42,18 @@ class Import extends Command
         $withHistory = $this->option('with-history');
         
         // Import coins data
-        $this->importCoins($limit);
+        $importedCoins = $this->importCoins($limit);
+        
+        if (empty($importedCoins)) {
+            $this->error('No coins were imported. Aborting.');
+            return;
+        }
         
         // Create markets for imported coins
-        $this->createMarkets();
+        $this->createMarkets($importedCoins);
         
-        // Import historical data if requested
-        if ($withHistory) {
-            $this->importHistoricalData();
-        }
+        // Import historical data for ALL imported coins (not optional anymore)
+        $this->importHistoricalData($importedCoins);
         
         $this->info('✅ Crypto data import completed successfully!');
     }
@@ -62,6 +65,8 @@ class Import extends Command
     {
         $this->info("📥 Importing top {$limit} cryptocurrencies...");
         
+        $importedCoins = [];
+        
         try {
             // Fetch assets from CoinCap API v3
             $response = Http::timeout(30)->get('https://rest.coincap.io/v3/assets', [
@@ -72,7 +77,7 @@ class Import extends Command
             
             if (!$response->successful()) {
                 $this->error('Failed to fetch data from CoinCap API: ' . $response->body());
-                return;
+                return $importedCoins;
             }
             
             $responseData = $response->json();
@@ -80,25 +85,30 @@ class Import extends Command
             
             if (empty($assets)) {
                 $this->error('No assets data received from API');
-                return;
+                return $importedCoins;
             }
             
             $progressBar = $this->output->createProgressBar(count($assets));
             $progressBar->start();
             
             foreach ($assets as $asset) {
-                $this->createOrUpdateCoin($asset);
+                $coin = $this->createOrUpdateCoin($asset);
+                if ($coin) {
+                    $importedCoins[] = $coin;
+                }
                 $progressBar->advance();
             }
             
             $progressBar->finish();
             $this->newLine();
-            $this->info("✅ Successfully imported " . count($assets) . " cryptocurrencies");
+            $this->info("✅ Successfully imported " . count($importedCoins) . " cryptocurrencies");
             
         } catch (\Exception $e) {
             $this->error("Error importing coins: " . $e->getMessage());
             Log::error('Crypto import error: ' . $e->getMessage());
         }
+        
+        return $importedCoins;
     }
     
     /**
@@ -110,7 +120,7 @@ class Import extends Command
         $currentPrice = $asset['priceUsd'] ? floatval($asset['priceUsd']) : 0;
         $priceChange24h = $currentPrice * ($priceChangePercent / 100);
         
-        Coin::updateOrCreate(
+        return Coin::updateOrCreate(
             ['symbol' => strtoupper($asset['symbol'])],
             [
                 'name' => $asset['name'],
@@ -139,17 +149,16 @@ class Import extends Command
     /**
      * Create trading markets for imported coins
      */
-    private function createMarkets()
+    private function createMarkets($importedCoins)
     {
         $this->info('📊 Creating trading markets...');
         
-        $coins = Coin::active()->orderBy('market_cap_rank')->take(50)->get();
         $baseAssets = ['USDT', 'BTC', 'ETH'];
         
-        $progressBar = $this->output->createProgressBar($coins->count() * count($baseAssets));
+        $progressBar = $this->output->createProgressBar(count($importedCoins) * count($baseAssets));
         $progressBar->start();
         
-        foreach ($coins as $coin) {
+        foreach ($importedCoins as $coin) {
             foreach ($baseAssets as $baseAsset) {
                 if ($coin->symbol !== $baseAsset) {
                     Market::updateOrCreate(
@@ -188,19 +197,23 @@ class Import extends Command
     }
     
     /**
-     * Import historical market data
+     * Import historical data for ALL imported coins
      */
-    private function importHistoricalData()
+    private function importHistoricalData($importedCoins)
     {
-        $this->info('📈 Importing historical data for top coins...');
+        $this->info('📈 Importing historical data for ALL imported coins...');
         
-        $topCoins = Coin::active()->orderBy('market_cap_rank')->take(10)->get();
+        $progressBar = $this->output->createProgressBar(count($importedCoins));
+        $progressBar->start();
         
-        foreach ($topCoins as $coin) {
+        foreach ($importedCoins as $coin) {
             $this->importCoinHistory($coin);
+            $progressBar->advance();
         }
         
-        $this->info('✅ Historical data import completed');
+        $progressBar->finish();
+        $this->newLine();
+        $this->info('✅ Historical data import completed for all coins');
     }
     
     /**
@@ -210,61 +223,133 @@ class Import extends Command
     {
         try {
             $coincapId = $coin->metadata['coincap_id'] ?? null;
-            if (!$coincapId) return;
-            
-            // Get 7 days of hourly data
-            $end = now()->timestamp * 1000;
-            $start = now()->subDays(7)->timestamp * 1000;
-            
-            $response = Http::timeout(30)->get("https://rest.coincap.io/v3/assets/{$coincapId}/history", [
-                'apiKey' => $this->apiKey,
-                'interval' => 'h1',
-                'start' => $start,
-                'end' => $end
-            ]);
-            
-            if (!$response->successful()) {
-                $this->warn("  ✗ Failed to fetch history for {$coin->symbol}: " . $response->body());
+            if (!$coincapId) {
+                $this->warn("  ✗ No CoinCap ID found for {$coin->symbol}");
                 return;
             }
             
-            $responseData = $response->json();
-            $data = $responseData['data'] ?? [];
+            // Import multiple timeframes
+            $timeframes = [
+                'h1' => ['interval' => 'h1', 'days' => 7, 'db_timeframe' => '1h'],
+                'd1' => ['interval' => 'd1', 'days' => 30, 'db_timeframe' => '1d'],
+            ];
             
             $market = Market::where('base_currency', $coin->symbol)
                            ->where('quote_currency', 'USDT')
                            ->first();
             
-            if (!$market) return;
+            if (!$market) {
+                $this->warn("  ✗ No USDT market found for {$coin->symbol}");
+                return;
+            }
             
-            foreach ($data as $point) {
-                $timestamp = Carbon::createFromTimestampMs($point['time']);
-                $price = floatval($point['priceUsd']);
-                
-                MarketData::updateOrCreate(
-                    [
-                        'market_id' => $market->id,
-                        'timeframe' => '1h',
-                        'timestamp' => $timestamp
-                    ],
-                    [
-                        'open' => $price,
-                        'high' => $price * 1.02, // Simulate some variance
-                        'low' => $price * 0.98,
-                        'close' => $price,
-                        'volume' => rand(1000, 100000),
-                        'quote_volume' => rand(1000000, 10000000),
-                        'trades_count' => rand(100, 1000),
-                        'is_fake' => false,
-                        'is_closed' => true
-                    ]
-                );
+            foreach ($timeframes as $key => $config) {
+                $this->importCoinHistoryForTimeframe($coin, $market, $coincapId, $config);
             }
             
             $this->line("  ✓ Imported history for {$coin->symbol}");
             
         } catch (\Exception $e) {
             $this->warn("  ✗ Failed to import history for {$coin->symbol}: " . $e->getMessage());
+            Log::error("Historical data import error for {$coin->symbol}: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Import historical data for a specific coin and timeframe
+     */
+    private function importCoinHistoryForTimeframe($coin, $market, $coincapId, $config)
+    {
+        try {
+            $end = now()->timestamp * 1000;
+            $start = now()->subDays($config['days'])->timestamp * 1000;
+            
+            $response = Http::timeout(30)->get("https://rest.coincap.io/v3/assets/{$coincapId}/history", [
+                'apiKey' => $this->apiKey,
+                'interval' => $config['interval'],
+                'start' => $start,
+                'end' => $end
+            ]);
+            
+            if (!$response->successful()) {
+                $this->warn("  ✗ Failed to fetch {$config['interval']} history for {$coin->symbol}: " . $response->body());
+                return;
+            }
+            
+            $responseData = $response->json();
+            $data = $responseData['data'] ?? [];
+            
+            if (empty($data)) {
+                $this->warn("  ✗ No historical data received for {$coin->symbol} {$config['interval']}");
+                return;
+            }
+            
+            // Sort data by timestamp to ensure proper order
+            usort($data, function($a, $b) {
+                return $a['time'] <=> $b['time'];
+            });
+            
+            $previousClose = null;
+            $importedCount = 0;
+            
+            foreach ($data as $point) {
+                $timestamp = Carbon::createFromTimestampMs($point['time']);
+                $price = floatval($point['priceUsd']);
+                
+                // Calculate OHLC with some realistic variance
+                $open = $previousClose ?? $price;
+                $close = $price;
+                $variance = 0.02; // 2% max variance
+                $high = max($open, $close) * (1 + (rand(0, 100) / 10000) * $variance);
+                $low = min($open, $close) * (1 - (rand(0, 100) / 10000) * $variance);
+                
+                // Calculate volume based on market cap (more realistic)
+                $baseVolume = $coin->volume_24h / 24; // Hourly average
+                if ($config['interval'] === 'd1') {
+                    $baseVolume = $coin->volume_24h;
+                }
+                $volume = $baseVolume * (0.5 + (rand(0, 100) / 100)); // 50-150% of average
+                
+                MarketData::updateOrCreate(
+                    [
+                        'market_id' => $market->id,
+                        'timeframe' => $config['db_timeframe'],
+                        'timestamp' => $timestamp
+                    ],
+                    [
+                        'open' => $open,
+                        'high' => $high,
+                        'low' => $low,
+                        'close' => $close,
+                        'volume' => $volume,
+                        'quote_volume' => $volume * (($open + $close) / 2),
+                        'trades_count' => rand(100, 2000),
+                        'is_fake' => false,
+                        'is_closed' => true
+                    ]
+                );
+                
+                $previousClose = $close;
+                $importedCount++;
+            }
+            
+            // Update market with latest data
+            $latestData = end($data);
+            if ($latestData) {
+                $latestPrice = floatval($latestData['priceUsd']);
+                $market->update([
+                    'current_price' => $latestPrice,
+                    'price_change_24h' => $coin->price_change_24h,
+                    'price_change_percentage_24h' => $coin->price_change_percentage_24h,
+                    'high_24h' => $latestPrice * 1.05,
+                    'low_24h' => $latestPrice * 0.95,
+                    'volume_24h' => $coin->volume_24h
+                ]);
+            }
+            
+        } catch (\Exception $e) {
+            $this->warn("  ✗ Error importing {$config['interval']} data for {$coin->symbol}: " . $e->getMessage());
+            Log::error("Timeframe import error for {$coin->symbol} {$config['interval']}: " . $e->getMessage());
         }
     }
     
