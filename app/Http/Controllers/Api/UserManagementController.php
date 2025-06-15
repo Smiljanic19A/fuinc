@@ -317,13 +317,12 @@ class UserManagementController extends Controller
                     'message' => 'Invalid credentials'
                 ], 401);
             }
-            $token = $user->createToken('auth_token')->plainTextToken;
             return response()->json([
                 'success' => true,
                 'message' => 'Login successful',
                 'type' => $user->user_type,
                 'data' => [
-                    'token' => $token
+                    'token' => $user
                 ]
             ]);
         } catch (\Exception $e) {
