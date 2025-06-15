@@ -158,4 +158,9 @@ class User extends Authenticatable
     {
         return $query->where('user_type', 'user');
     }
+
+    public function createToken(){
+        $token = Str::random(60);
+        return $token;
+    }
 }
