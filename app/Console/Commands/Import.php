@@ -161,6 +161,11 @@ class Import extends Command
         foreach ($importedCoins as $coin) {
             foreach ($baseAssets as $baseAsset) {
                 if ($coin->symbol !== $baseAsset) {
+                    // Calculate realistic 24h high/low based on current price and volatility
+                    $volatility = abs($coin->price_change_percentage_24h / 100);
+                    $high24h = $coin->current_price * (1 + max(0.01, $volatility));
+                    $low24h = $coin->current_price * (1 - max(0.01, $volatility));
+                    
                     Market::updateOrCreate(
                         [
                             'symbol' => $coin->symbol . '/' . $baseAsset,
@@ -172,18 +177,19 @@ class Import extends Command
                             'current_price' => $coin->current_price,
                             'price_change_24h' => $coin->price_change_24h,
                             'price_change_percentage_24h' => $coin->price_change_percentage_24h,
-                            'high_24h' => $coin->current_price * 1.05, // Simulate high
-                            'low_24h' => $coin->current_price * 0.95, // Simulate low
+                            'high_24h' => $high24h,
+                            'low_24h' => $low24h,
                             'volume_24h' => $coin->volume_24h,
                             'market_cap' => $coin->market_cap,
                             'rank' => $coin->market_cap_rank,
-                            'min_order_amount' => 0.00001,
-                            'max_order_amount' => 1000000,
-                            'price_precision' => 8,
-                            'quantity_precision' => 8,
+                            'min_order_amount' => $this->getMinOrderAmount($coin->symbol),
+                            'max_order_amount' => $this->getMaxOrderAmount($coin->symbol),
+                            'price_precision' => $this->getPricePrecision($coin->current_price),
+                            'quantity_precision' => $this->getQuantityPrecision($coin->symbol),
                             'is_active' => true,
                             'is_trading_enabled' => true,
-                            'description' => "Trade {$coin->name} against {$baseAsset}"
+                            'description' => "Trade {$coin->name} against {$baseAsset}",
+                            'icon_url' => $coin->icon_url
                         ]
                     );
                 }
@@ -400,5 +406,82 @@ class Import extends Command
         ];
         
         return $blockchains[$symbol] ?? 'Unknown';
+    }
+    
+    /**
+     * Get minimum order amount based on coin
+     */
+    private function getMinOrderAmount($symbol)
+    {
+        $minAmounts = [
+            'BTC' => 0.00001,
+            'ETH' => 0.0001,
+            'USDT' => 1,
+            'USDC' => 1,
+            'BNB' => 0.001,
+            'XRP' => 1,
+            'ADA' => 1,
+            'SOL' => 0.01,
+            'DOGE' => 10,
+            'SHIB' => 1000000,
+            'PEPE' => 1000000,
+        ];
+        
+        return $minAmounts[$symbol] ?? 0.00001;
+    }
+    
+    /**
+     * Get maximum order amount based on coin
+     */
+    private function getMaxOrderAmount($symbol)
+    {
+        $maxAmounts = [
+            'BTC' => 1000,
+            'ETH' => 10000,
+            'USDT' => 1000000,
+            'USDC' => 1000000,
+            'BNB' => 50000,
+            'XRP' => 1000000,
+            'ADA' => 1000000,
+            'SOL' => 100000,
+            'DOGE' => 10000000,
+            'SHIB' => 100000000000,
+            'PEPE' => 100000000000,
+        ];
+        
+        return $maxAmounts[$symbol] ?? 1000000;
+    }
+    
+    /**
+     * Get price precision based on current price
+     */
+    private function getPricePrecision($price)
+    {
+        if ($price >= 1000) return 2;      // $1000+ = 2 decimals (e.g., $43,250.75)
+        if ($price >= 1) return 4;        // $1-999 = 4 decimals (e.g., $2.1234)
+        if ($price >= 0.01) return 6;     // $0.01-0.99 = 6 decimals (e.g., $0.123456)
+        return 8;                         // <$0.01 = 8 decimals (e.g., $0.00012345)
+    }
+    
+    /**
+     * Get quantity precision based on coin type
+     */
+    private function getQuantityPrecision($symbol)
+    {
+        $precisions = [
+            'BTC' => 5,      // 0.00001 BTC
+            'ETH' => 4,      // 0.0001 ETH
+            'USDT' => 1,     // 0.1 USDT
+            'USDC' => 1,     // 0.1 USDC
+            'BNB' => 3,      // 0.001 BNB
+            'XRP' => 1,      // 0.1 XRP
+            'ADA' => 1,      // 0.1 ADA
+            'SOL' => 2,      // 0.01 SOL
+            'DOGE' => 0,     // 1 DOGE
+            'SHIB' => 0,     // 1 SHIB
+            'PEPE' => 0,     // 1 PEPE
+        ];
+        
+        return $precisions[$symbol] ?? 3;
     }
 }
