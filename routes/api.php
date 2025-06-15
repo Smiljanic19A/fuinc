@@ -31,7 +31,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/fetch', [UserManagementController::class, 'fetch']);
         Route::post('/authenticate', [UserManagementController::class, 'authenticate']);
         Route::post('/login', [UserManagementController::class, 'login']);
-        
+
         // Protected routes (superadmin only)
         Route::middleware(['auth', 'superadmin'])->group(function () {
             Route::post('/promote', [UserManagementController::class, 'promoteUser']);
@@ -47,14 +47,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/{symbol}', [MarketController::class, 'show']);
     });
 
-    Route::prefix('orders')->middleware(['auth'])->group(function () {
+    Route::prefix('orders')->group(function () {
         Route::post('/', [OrderController::class, 'create']);
         Route::get('/history', [OrderController::class, 'history']);
         Route::get('/open', [OrderController::class, 'open']);
         Route::delete('/{id}', [OrderController::class, 'cancel']);
     });
 
-    Route::prefix('positions')->middleware(['auth'])->group(function () {
+    Route::prefix('positions')->group(function () {
         Route::get('/', [PositionController::class, 'index']);
         Route::get('/{id}', [PositionController::class, 'show']);
         Route::post('/close/{id}', [PositionController::class, 'close']);
@@ -69,7 +69,7 @@ Route::prefix('v1')->group(function () {
     });
 
     // 💰 Deposit & Withdrawals (Fake Wallets)
-    Route::prefix('wallets')->middleware(['auth'])->group(function () {
+    Route::prefix('wallets')->group(function () {
         Route::get('/balances', [WalletController::class, 'balances']);
         Route::post('/deposit/request', [WalletController::class, 'requestDeposit']);
         Route::get('/deposit/history', [WalletController::class, 'depositHistory']);
@@ -96,7 +96,7 @@ Route::prefix('v1')->group(function () {
     });
 
     // 📄 Promises / Bonuses
-    Route::prefix('promises')->middleware(['auth'])->group(function () {
+    Route::prefix('promises')->group(function () {
         Route::get('/', [PromiseController::class, 'index']);
         Route::get('/{id}', [PromiseController::class, 'show']);
         Route::post('/{id}/redeem', [PromiseController::class, 'redeem']);
