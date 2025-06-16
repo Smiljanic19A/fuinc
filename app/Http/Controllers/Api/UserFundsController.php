@@ -48,8 +48,12 @@ class UserFundsController extends Controller
                 ->whereIn('status', ['pending', 'partially_filled'])
                 ->count();
 
-            // Calculate total funds and allocations
-            $totalUserFunds = $userFunds->sum('value_in_dollars');
+            // Calculate total funds and allocations using real-time USD values
+            $totalUserFunds = 0;
+            foreach ($userFunds as $fund) {
+                $totalUserFunds += $fund->getUsdValue();
+            }
+            
             $totalAllocatedFunds = $allocatedFunds->sum('amount');
             $totalAvailableFunds = $totalUserFunds - $totalAllocatedFunds;
             
@@ -77,13 +81,17 @@ class UserFundsController extends Controller
                     ->where('currency', $fund->currency)
                     ->sum('amount');
                 
-                $availableForCurrency = $fund->value_in_dollars - $allocatedForCurrency;
+                $fundUsdValue = $fund->getUsdValue();
+                $availableForCurrency = $fundUsdValue - $allocatedForCurrency;
                 
                 $fundsByCurrency[] = [
                     'currency' => $fund->currency,
-                    'total_balance' => $fund->value_in_dollars,
-                    'available_balance' => max(0, $availableForCurrency),
-                    'allocated_balance' => $allocatedForCurrency,
+                    'crypto_amount' => (float) $fund->amount,
+                    'total_balance_usd' => round($fundUsdValue, 2),
+                    'available_balance_usd' => round(max(0, $availableForCurrency), 2),
+                    'allocated_balance_usd' => round($allocatedForCurrency, 2),
+                    'current_price' => $fund->currency === 'USDT' || $fund->currency === 'USDC' ? 1 : 
+                        round(UserFund::calculateUsdValue(1, $fund->currency), 2),
                     'status' => 'cash'
                 ];
             }

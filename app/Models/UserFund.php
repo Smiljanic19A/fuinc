@@ -12,12 +12,12 @@ class UserFund extends Model
 
     protected $fillable = [
         'user_id',
-        'value_in_dollars',
+        'amount',
         'currency',
     ];
 
     protected $casts = [
-        'value_in_dollars' => 'decimal:8',
+        'amount' => 'decimal:18,8',
     ];
 
     // Relationships
@@ -39,28 +39,69 @@ class UserFund extends Model
 
     public function scopeWithPositiveBalance($query)
     {
-        return $query->where('value_in_dollars', '>', 0);
+        return $query->where('amount', '>', 0);
     }
 
     // Methods
     public function addFunds($amount): void
     {
-        $this->increment('value_in_dollars', $amount);
+        $this->increment('amount', $amount);
     }
 
     public function subtractFunds($amount): void
     {
-        $this->decrement('value_in_dollars', $amount);
+        $this->decrement('amount', $amount);
     }
 
     public function hasBalance(): bool
     {
-        return $this->value_in_dollars > 0;
+        return $this->amount > 0;
     }
 
     public function getFormattedBalance(): string
     {
-        return '$' . number_format($this->value_in_dollars, 2);
+        if ($this->currency === 'USDT' || $this->currency === 'USDC') {
+            return '$' . number_format($this->amount, 2);
+        }
+        return number_format($this->amount, 8) . ' ' . $this->currency;
+    }
+
+    /**
+     * Get the USD value of this fund using current market price
+     */
+    public function getUsdValue(): float
+    {
+        return static::calculateUsdValue($this->amount, $this->currency);
+    }
+
+    /**
+     * Calculate USD value for any amount and currency
+     */
+    public static function calculateUsdValue($amount, $currency): float
+    {
+        // If it's already USD-based, return as is
+        if (in_array($currency, ['USDT', 'USDC', 'USD'])) {
+            return (float) $amount;
+        }
+
+        // Get current market price for the currency
+        $market = \App\Models\Market::where('base_currency', $currency)
+            ->where('quote_currency', 'USDT')
+            ->first();
+
+        if (!$market) {
+            // Fallback: try to find any USD pair
+            $market = \App\Models\Market::where('base_currency', $currency)
+                ->whereIn('quote_currency', ['USDT', 'USDC'])
+                ->first();
+        }
+
+        if ($market && $market->current_price) {
+            return (float) ($amount * $market->current_price);
+        }
+
+        // If no market found, return 0 (or you could throw an exception)
+        return 0;
     }
 
     // Static methods
@@ -68,14 +109,32 @@ class UserFund extends Model
     {
         return static::where('user_id', $userId)
                     ->where('currency', $currency)
-                    ->value('value_in_dollars') ?? 0;
+                    ->value('amount') ?? 0;
+    }
+
+    public static function getUserBalanceInUsd($userId, $currency)
+    {
+        $amount = static::getUserBalance($userId, $currency);
+        return static::calculateUsdValue($amount, $currency);
+    }
+
+    public static function getUserTotalUsdValue($userId)
+    {
+        $userFunds = static::where('user_id', $userId)->get();
+        $totalUsd = 0;
+
+        foreach ($userFunds as $fund) {
+            $totalUsd += $fund->getUsdValue();
+        }
+
+        return $totalUsd;
     }
 
     public static function createOrUpdateBalance($userId, $currency, $amount)
     {
         return static::updateOrCreate(
             ['user_id' => $userId, 'currency' => $currency],
-            ['value_in_dollars' => $amount]
+            ['amount' => $amount]
         );
     }
 
@@ -83,7 +142,7 @@ class UserFund extends Model
     {
         $userFund = static::firstOrCreate(
             ['user_id' => $userId, 'currency' => $currency],
-            ['value_in_dollars' => 0]
+            ['amount' => 0]
         );
         
         $userFund->addFunds($amount);
