@@ -17,12 +17,14 @@ class DepositController extends Controller
     {
         try {
             $validated = $request->validate([
+                'user_id' => 'required|exists:users,id',
                 'amount' => 'required|numeric|min:0.00000001',
                 'currency' => 'required|string|max:10|in:BTC,ETH,USDT,USDC,BNB,ADA,XRP,SOL,DOT,MATIC',
                 'network' => 'required|string|max:50'
             ]);
 
             $deposit = Deposit::create([
+                'user_id' => $validated['user_id'],
                 'amount' => $validated['amount'],
                 'currency' => strtoupper($validated['currency']),
                 'network' => $validated['network'],
@@ -33,7 +35,7 @@ class DepositController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Deposit request created successfully',
-                'data' => $deposit
+                'data' => $deposit->load('user:id,name,email')
             ], 201);
 
         } catch (ValidationException $e) {
@@ -70,7 +72,7 @@ class DepositController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Wallet address provided successfully',
-                'data' => $deposit->fresh()
+                'data' => $deposit->fresh()->load('user:id,name,email')
             ]);
 
         } catch (ValidationException $e) {
@@ -103,7 +105,9 @@ class DepositController extends Controller
             $status = $request->get('status'); // 'filled', 'pending', or null for all
             $currency = $request->get('currency');
 
-            $query = Deposit::query()->orderBy('created_at', 'desc');
+            $query = Deposit::query()
+                ->with('user:id,name,email')
+                ->orderBy('created_at', 'desc');
 
             // Filter by status
             if ($status === 'filled') {
@@ -140,20 +144,15 @@ class DepositController extends Controller
     public function getUserDeposits($userId): JsonResponse
     {
         try {
-            // Note: Since we don't have user_id in deposits table yet, 
-            // this is a placeholder implementation
-            // You might want to add user_id to deposits table or link through another relationship
-
-            $deposits = Deposit::orderBy('created_at', 'desc')->get();
-
-            // For now, returning all deposits as placeholder
-            // TODO: Add user_id to deposits table and filter by user
+            $deposits = Deposit::where('user_id', $userId)
+                ->with('user:id,name,email')
+                ->orderBy('created_at', 'desc')
+                ->get();
             
             return response()->json([
                 'success' => true,
                 'message' => "Deposits for user {$userId} retrieved successfully",
-                'data' => $deposits,
-                'note' => 'Currently returning all deposits. Add user_id field to deposits table to filter by user.'
+                'data' => $deposits
             ]);
 
         } catch (\Exception $e) {
