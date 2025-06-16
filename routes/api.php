@@ -54,6 +54,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/', [OrderController::class, 'create']);
         Route::get('/history', [OrderController::class, 'history']);
         Route::get('/open', [OrderController::class, 'open']);
+        Route::get('/user/{userId}', [OrderController::class, 'getUserOrders']);
         Route::delete('/{id}', [OrderController::class, 'cancel']);
     });
 
