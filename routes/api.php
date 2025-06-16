@@ -106,9 +106,10 @@ Route::prefix('v1')->group(function () {
 
     // 📣 Announcements
     Route::prefix('announcements')->group(function () {
-        Route::get('/', [AnnouncementController::class, 'index']);
-        Route::get('/{id}', [AnnouncementController::class, 'show']);
-        Route::post('/{id}/view', [AnnouncementController::class, 'markAsViewed'])->middleware(['auth']);
+        Route::get('/latest', [AnnouncementController::class, 'latest']);
+        Route::post('/', [AnnouncementController::class, 'create']);
+        Route::put('/{id}', [AnnouncementController::class, 'update']);
+        Route::delete('/{id}', [AnnouncementController::class, 'delete']);
     });
 
     // 📄 Promises / Bonuses
@@ -165,14 +166,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/bulk-hot', [CoinController::class, 'bulkUpdateHot']);
         });
 
-        // Announcements Management
-        Route::prefix('announcements')->group(function () {
-            Route::post('/', [AnnouncementController::class, 'create']);
-            Route::put('/{id}', [AnnouncementController::class, 'update']);
-            Route::delete('/{id}', [AnnouncementController::class, 'delete']);
-            Route::post('/{id}/publish', [AnnouncementController::class, 'publish']);
-            Route::post('/{id}/unpublish', [AnnouncementController::class, 'unpublish']);
-        });
+
 
         // Promise Management
         Route::prefix('promises')->group(function () {
