@@ -445,4 +445,133 @@ class OrderController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get order history for authenticated user
+     */
+    public function history(Request $request): JsonResponse
+    {
+        try {
+            // This would typically get user_id from authentication, but for now using request parameter
+            $userId = $request->get('user_id');
+            
+            if (!$userId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User ID is required'
+                ], 400);
+            }
+
+            $orders = Order::where('user_id', $userId)
+                ->whereIn('status', ['filled', 'cancelled', 'partially_filled'])
+                ->with([
+                    'user:id,name,email',
+                    'market:id,symbol,display_name,current_price'
+                ])
+                ->orderBy('created_at', 'desc')
+                ->paginate(20);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order history retrieved successfully',
+                'data' => $orders
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve order history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get open orders for authenticated user
+     */
+    public function open(Request $request): JsonResponse
+    {
+        try {
+            // This would typically get user_id from authentication, but for now using request parameter
+            $userId = $request->get('user_id');
+            
+            if (!$userId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User ID is required'
+                ], 400);
+            }
+
+            $orders = Order::where('user_id', $userId)
+                ->whereIn('status', ['pending', 'partially_filled'])
+                ->with([
+                    'user:id,name,email',
+                    'market:id,symbol,display_name,current_price'
+                ])
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Open orders retrieved successfully',
+                'data' => $orders
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve open orders',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancel an order
+     */
+    public function cancel($id): JsonResponse
+    {
+        try {
+            $order = Order::findOrFail($id);
+
+            // Check if order can be cancelled
+            if (!$order->isOpen()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order cannot be cancelled. Current status: ' . $order->status
+                ], 400);
+            }
+
+            // Release allocated funds
+            UserFundAllocation::releaseOrderAllocations($order);
+
+            // Update order status
+            $order->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancel_reason' => 'User cancellation'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order cancelled successfully and funds released',
+                'data' => $order->fresh()->load([
+                    'user:id,name,email',
+                    'market:id,symbol,display_name,current_price'
+                ])
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cancel order',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
