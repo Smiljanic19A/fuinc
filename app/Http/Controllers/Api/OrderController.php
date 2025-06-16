@@ -56,7 +56,14 @@ class OrderController extends Controller
                     'details' => [
                         'required' => $allocationAmount,
                         'available' => $availableBalance,
-                        'currency' => $allocationCurrency
+                        'currency' => $allocationCurrency,
+                        'debug_fund_breakdown' => [
+                            'total_balance' => $userBalance,
+                            'currently_allocated' => $currentAllocated,
+                            'available_balance' => $availableBalance,
+                            'shortfall' => $allocationAmount - $availableBalance,
+                            'allocation_percentage' => $userBalance > 0 ? round(($currentAllocated / $userBalance) * 100, 2) : 0
+                        ]
                     ]
                 ], 400);
             }
@@ -199,7 +206,19 @@ class OrderController extends Controller
                         'details' => [
                             'additional_required' => $allocationDifference,
                             'available' => $availableBalance,
-                            'currency' => $allocationCurrency
+                            'currency' => $allocationCurrency,
+                            'debug_fund_breakdown' => [
+                                'total_balance' => $userBalance,
+                                'currently_allocated' => $currentAllocated,
+                                'available_balance' => $availableBalance,
+                                'additional_needed' => $allocationDifference,
+                                'allocation_percentage' => $userBalance > 0 ? round(($currentAllocated / $userBalance) * 100, 2) : 0,
+                                'order_details' => [
+                                    'current_allocation' => $currentAllocation,
+                                    'new_allocation' => $newAllocation,
+                                    'difference' => $allocationDifference
+                                ]
+                            ]
                         ]
                     ], 400);
                 }
