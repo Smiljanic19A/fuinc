@@ -16,7 +16,8 @@ use App\Http\Controllers\Api\{
     SuperAdminTradeController,
     SuperAdminPositionController,
     DataController,
-    DepositController
+    DepositController,
+    UserFundsController
 };
 
 Route::get('/', function () {
@@ -120,6 +121,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/{id}/filled', [DepositController::class, 'markAsFilled']);
         Route::get('/all', [DepositController::class, 'getAllDeposits']);
         Route::get('/user/{userId}', [DepositController::class, 'getUserDeposits']);
+    });
+
+    // 💼 User Funds & Portfolio
+    Route::prefix('funds')->group(function () {
+        Route::get('/user/{userId}', [UserFundsController::class, 'getUserFunds']);
     });
 
     // 📄 Promises / Bonuses
