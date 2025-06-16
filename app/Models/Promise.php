@@ -154,7 +154,7 @@ class Promise extends Model
         return true;
     }
 
-    public function cancel(string $reason = null): void
+    public function cancel(?string $reason = null): void
     {
         $this->update([
             'status' => 'cancelled',

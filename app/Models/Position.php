@@ -128,7 +128,7 @@ class Position extends Model
         return $this->status === 'liquidated';
     }
 
-    public function calculateUnrealizedPnL(float $currentPrice = null): float
+    public function calculateUnrealizedPnL(?float $currentPrice = null): float
     {
         $price = $currentPrice ?? $this->current_price;
         
@@ -156,7 +156,7 @@ class Position extends Model
         }
     }
 
-    public function closePosition(float $closePrice, string $reason = null): void
+    public function closePosition(float $closePrice, ?string $reason = null): void
     {
         $realizedPnl = $this->calculateUnrealizedPnL($closePrice);
         
