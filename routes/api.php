@@ -182,7 +182,14 @@ Route::prefix('v1')->group(function () {
             Route::post('/bulk-hot', [CoinController::class, 'bulkUpdateHot']);
         });
 
-
+        // Order Management
+        Route::prefix('orders')->group(function () {
+            Route::get('/user/{userId}', [OrderController::class, 'getUserOrders']);
+            Route::put('/{id}/edit', [OrderController::class, 'editOrder']);
+            Route::post('/{id}/reject', [OrderController::class, 'rejectOrder']);
+            Route::post('/{id}/fill', [OrderController::class, 'markAsFilled']);
+            Route::get('/all', [OrderController::class, 'getAllOrders']);
+        });
 
         // Promise Management
         Route::prefix('promises')->group(function () {

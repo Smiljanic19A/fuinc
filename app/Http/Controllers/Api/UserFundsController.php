@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\UserFund;
+use App\Models\UserFundAllocation;
 use App\Models\Position;
 use App\Models\Order;
 use App\Models\Market;
@@ -26,6 +27,11 @@ class UserFundsController extends Controller
             // Get all user funds (available cash)
             $userFunds = UserFund::where('user_id', $userId)->get();
             
+            // Get allocated funds (reserved for orders)
+            $allocatedFunds = UserFundAllocation::where('user_id', $userId)
+                ->where('is_active', true)
+                ->get();
+            
             // Get open positions (active trades)
             $openPositions = Position::where('user_id', $userId)
                 ->where('status', 'open')
@@ -42,8 +48,10 @@ class UserFundsController extends Controller
                 ->whereIn('status', ['pending', 'partially_filled'])
                 ->count();
 
-            // Calculate total available funds (cash)
-            $totalAvailableFunds = $userFunds->sum('value_in_dollars');
+            // Calculate total funds and allocations
+            $totalUserFunds = $userFunds->sum('value_in_dollars');
+            $totalAllocatedFunds = $allocatedFunds->sum('amount');
+            $totalAvailableFunds = $totalUserFunds - $totalAllocatedFunds;
             
             // Calculate total margin used in active trades
             $totalMarginUsed = $openPositions->sum('margin_used');
@@ -58,15 +66,35 @@ class UserFundsController extends Controller
             $allTimePnL = $totalRealizedPnL + $unrealizedPnL;
             
             // Calculate total portfolio value
-            $totalPortfolioValue = $totalAvailableFunds + $totalMarginUsed + $unrealizedPnL;
+            $totalPortfolioValue = $totalUserFunds + $totalMarginUsed + $unrealizedPnL;
             
             // Build fund distribution by currency
             $fundsByCurrency = [];
+            $allocatedByCurrency = [];
+            
             foreach ($userFunds as $fund) {
+                $allocatedForCurrency = $allocatedFunds
+                    ->where('currency', $fund->currency)
+                    ->sum('amount');
+                
+                $availableForCurrency = $fund->value_in_dollars - $allocatedForCurrency;
+                
                 $fundsByCurrency[] = [
                     'currency' => $fund->currency,
-                    'amount_usd' => $fund->value_in_dollars,
-                    'status' => 'available'
+                    'total_balance' => $fund->value_in_dollars,
+                    'available_balance' => max(0, $availableForCurrency),
+                    'allocated_balance' => $allocatedForCurrency,
+                    'status' => 'cash'
+                ];
+            }
+            
+            // Add allocated funds breakdown
+            foreach ($allocatedFunds->groupBy('currency') as $currency => $allocations) {
+                $allocatedByCurrency[] = [
+                    'currency' => $currency,
+                    'amount_usd' => $allocations->sum('amount'),
+                    'order_count' => $allocations->where('type', 'order_reserve')->count(),
+                    'status' => 'allocated_to_orders'
                 ];
             }
             
@@ -104,7 +132,9 @@ class UserFundsController extends Controller
                     ],
                     'portfolio_summary' => [
                         'total_portfolio_value' => round($totalPortfolioValue, 2),
+                        'total_funds' => round($totalUserFunds, 2),
                         'available_funds' => round($totalAvailableFunds, 2),
+                        'allocated_funds' => round($totalAllocatedFunds, 2),
                         'margin_used' => round($totalMarginUsed, 2),
                         'unrealized_pnl' => round($unrealizedPnL, 2),
                         'all_time_pnl' => round($allTimePnL, 2),
@@ -112,8 +142,11 @@ class UserFundsController extends Controller
                         'last_30_days_pnl' => round($last30DaysPnL, 2)
                     ],
                     'fund_distribution' => [
-                        'available_cash' => $fundsByCurrency,
-                        'total_available_usd' => round($totalAvailableFunds, 2)
+                        'cash_balances' => $fundsByCurrency,
+                        'allocated_funds' => $allocatedByCurrency,
+                        'total_cash_usd' => round($totalUserFunds, 2),
+                        'total_available_usd' => round($totalAvailableFunds, 2),
+                        'total_allocated_usd' => round($totalAllocatedFunds, 2)
                     ],
                     'active_trades' => [
                         'positions' => $activeTrades,
