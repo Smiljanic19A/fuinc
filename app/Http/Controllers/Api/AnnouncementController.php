@@ -16,7 +16,8 @@ class AnnouncementController extends Controller
     public function latest(): JsonResponse
     {
         try {
-            $announcement = Announcement::where("show_on_homepage", true)->orderBy("created_at", "desc")->first();
+            $announcement = Announcement::where("show_on_homepage", true)
+            ->orderBy("created_at", "desc")->first();
 
             if (!$announcement) {
                 return response()->json([
