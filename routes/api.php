@@ -15,7 +15,8 @@ use App\Http\Controllers\Api\{
     SuperAdminUserController,
     SuperAdminTradeController,
     SuperAdminPositionController,
-    DataController
+    DataController,
+    DepositController
 };
 
 Route::get('/', function () {
@@ -110,6 +111,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/', [AnnouncementController::class, 'create']);
         Route::put('/{id}', [AnnouncementController::class, 'update']);
         Route::delete('/{id}', [AnnouncementController::class, 'delete']);
+    });
+
+    // 💰 Deposits
+    Route::prefix('deposits')->group(function () {
+        Route::post('/request', [DepositController::class, 'requestDeposit']);
+        Route::post('/{id}/address', [DepositController::class, 'provideAddress']);
+        Route::get('/all', [DepositController::class, 'getAllDeposits']);
+        Route::get('/user/{userId}', [DepositController::class, 'getUserDeposits']);
     });
 
     // 📄 Promises / Bonuses
