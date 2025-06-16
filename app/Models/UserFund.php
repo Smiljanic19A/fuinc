@@ -78,4 +78,15 @@ class UserFund extends Model
             ['value_in_dollars' => $amount]
         );
     }
+
+    public static function addFundsToBalance($userId, $currency, $amount)
+    {
+        $userFund = static::firstOrCreate(
+            ['user_id' => $userId, 'currency' => $currency],
+            ['value_in_dollars' => 0]
+        );
+        
+        $userFund->addFunds($amount);
+        return $userFund;
+    }
 }

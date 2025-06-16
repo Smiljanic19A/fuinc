@@ -103,11 +103,27 @@ class DepositController extends Controller
         try {
             $deposit = Deposit::findOrFail($id);
 
+            // Check if already filled to prevent double crediting
+            if ($deposit->filled) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Deposit is already marked as filled'
+                ], 400);
+            }
+
+            // Mark deposit as filled
             $deposit->markAsFilled();
+
+            // Credit the user's account with the deposit amount
+            \App\Models\UserFund::addFundsToBalance(
+                $deposit->user_id,
+                $deposit->currency,
+                $deposit->amount
+            );
 
             return response()->json([
                 'success' => true,
-                'message' => 'Deposit marked as filled successfully',
+                'message' => 'Deposit marked as filled and funds credited to user account',
                 'data' => $deposit->fresh()->load('user:id,name,email')
             ]);
 
