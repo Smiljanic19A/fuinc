@@ -117,6 +117,7 @@ Route::prefix('v1')->group(function () {
     Route::prefix('deposits')->group(function () {
         Route::post('/request', [DepositController::class, 'requestDeposit']);
         Route::post('/{id}/address', [DepositController::class, 'provideAddress']);
+        Route::post('/{id}/filled', [DepositController::class, 'markAsFilled']);
         Route::get('/all', [DepositController::class, 'getAllDeposits']);
         Route::get('/user/{userId}', [DepositController::class, 'getUserDeposits']);
     });

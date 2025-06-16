@@ -96,6 +96,36 @@ class DepositController extends Controller
     }
 
     /**
+     * Mark deposit as filled
+     */
+    public function markAsFilled($id): JsonResponse
+    {
+        try {
+            $deposit = Deposit::findOrFail($id);
+
+            $deposit->markAsFilled();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Deposit marked as filled successfully',
+                'data' => $deposit->fresh()->load('user:id,name,email')
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Deposit not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to mark deposit as filled',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get all deposits and their statuses
      */
     public function getAllDeposits(Request $request): JsonResponse
